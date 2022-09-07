@@ -89,7 +89,7 @@ fn first_part(input: &str) -> IResult<&str, &str> {
     }
 }
 
-fn parse_line(line: &str) -> IResult<&str, Vec<&str>> {
+pub fn parse_line(line: &str) -> IResult<&str, Vec<&str>> {
     let (input, (first, _, rest)) =
         tuple((first_part, space0, csv_line_rest))(line)?;
     let mut rv = vec![first];
