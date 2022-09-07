@@ -1,12 +1,12 @@
 use nom::{
-    bytes::complete::{is_not},
+    bytes::complete::{is_not, tag},
     character::complete::{char, space0},
     sequence::{delimited, tuple},
     IResult,
 };
 
 fn non_quote_parse_rest(input: &str) -> IResult<&str, (&str, Vec<&str>)> {
-    tuple((is_not(", "), csv_line_rest))(input)
+    tuple((is_not(","), csv_line_rest))(input)
 }
 
 fn quote_parse_rest(input: &str) -> IResult<&str, (&str, Vec<&str>)> {
@@ -49,6 +49,12 @@ fn csv_line_rest(input: &str) -> IResult<&str, Vec<&str>> {
                 rv.extend_from_slice(&rest);
                 input = i;
             }
+            if let Ok((_input, _)) = tag::<_, _, ()>("\"\",")(input) {
+                rv.push("");
+                input = _input;
+                is_quoted = false;
+                continue;
+            }
         }
         if let Ok((_input, _)) = char::<_, ()>(',')(input) {
             // empty column
@@ -57,16 +63,18 @@ fn csv_line_rest(input: &str) -> IResult<&str, Vec<&str>> {
             continue;
         }
         if let Ok((i, (field, rest))) = non_quote_parse_rest(input) {
-            rv.push(field);
-            rv.extend_from_slice(&rest);
             input = i;
             if input.is_empty() {
+                rv.push(field.trim());
+                rv.extend_from_slice(&rest);
                 break;
+            } else {
+                rv.push(field);
+                rv.extend_from_slice(&rest);
             }
         } else {
             break;
         }
-        
     }
     Ok((input, rv))
 }
@@ -80,8 +88,7 @@ fn first_part(input: &str) -> IResult<&str, &str> {
     if let Ok(_) = char::<_, ()>('"')(m_input) {
         delimited(char('"'), is_not("\""), char('"'))(m_input)
     } else {
-
-        if let Ok((_input, _)) = char::<_, ()>(',')(m_input){
+        if let Ok((_input, _)) = char::<_, ()>(',')(m_input) {
             return Ok((m_input, ""));
         }
 
@@ -90,8 +97,7 @@ fn first_part(input: &str) -> IResult<&str, &str> {
 }
 
 pub fn parse_line(line: &str) -> IResult<&str, Vec<&str>> {
-    let (input, (first, _, rest)) =
-        tuple((first_part, space0, csv_line_rest))(line)?;
+    let (input, (first, _, rest)) = tuple((first_part, space0, csv_line_rest))(line)?;
     let mut rv = vec![first];
     rv.extend_from_slice(&rest);
     Ok((input, rv))
@@ -154,5 +160,30 @@ mod tests {
         test_long_text_with_trailing_spaces_all,
         "  \"a\"  ,    \"b\" ,   \"long text with number\"   , 123  ",
         vec!["a", "b", "long text with number", "123"]
+    );
+    gen_test!(
+        test_long_columns,
+        r#"1,22,33,44,abc def,GHI JKL,MNOP,"",2,5555,3333,"ABC DEFG",HIJ KLMNO,"1|2|3",0,X,A B C D E,0,000-000 00:00"#,
+        vec![
+            "1",
+            "22",
+            "33",
+            "44",
+            "abc def",
+            "GHI JKL",
+            "MNOP",
+            "",
+            "2",
+            "5555",
+            "3333",
+            "ABC DEFG",
+            "HIJ KLMNO",
+            "1|2|3",
+            "0",
+            "X",
+            "A B C D E",
+            "0",
+            "000-000 00:00"
+        ]
     );
 }
