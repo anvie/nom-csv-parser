@@ -7,6 +7,9 @@ use nom::{
 };
 
 fn non_quote_parse_rest(input: &str) -> IResult<&str, (&str, Vec<&str>)> {
+    // if input.is_empty() {
+    //     return Ok((input, ("", vec![])));
+    // }
     tuple((is_not(", "), csv_line_rest))(input)
 }
 
@@ -15,6 +18,9 @@ fn quote_parse_rest(input: &str) -> IResult<&str, (&str, Vec<&str>)> {
 }
 
 fn csv_line_rest(input: &str) -> IResult<&str, Vec<&str>> {
+    if input.is_empty() {
+        return Ok((input, vec![]));
+    }
     let mut rv = vec![];
     let mut input = input;
     let mut is_quoted = false;
@@ -30,10 +36,17 @@ fn csv_line_rest(input: &str) -> IResult<&str, Vec<&str>> {
     if let Ok((_input, _)) = space0::<_, ()>(input) {
         input = _input;
     }
+    if input.is_empty() {
+        return Ok((input, rv));
+    }
     if let Ok((_input, _)) = char::<_, ()>('"')(input) {
         is_quoted = true;
     }
     loop {
+        if input.is_empty() {
+            rv.push("");
+            break;
+        }
         if is_quoted {
             if let Ok((i, (field, rest))) = quote_parse_rest(input) {
                 rv.push(field);
@@ -41,13 +54,23 @@ fn csv_line_rest(input: &str) -> IResult<&str, Vec<&str>> {
                 input = i;
             }
         }
+        if let Ok((_input, _)) = char::<_, ()>(',')(input) {
+            // empty column
+            rv.push("");
+            input = _input;
+            continue;
+        }
         if let Ok((i, (field, rest))) = non_quote_parse_rest(input) {
             rv.push(field);
             rv.extend_from_slice(&rest);
             input = i;
+            if input.is_empty() {
+                break;
+            }
         } else {
             break;
         }
+        
     }
     Ok((input, rv))
 }
@@ -61,6 +84,11 @@ fn first_part(input: &str) -> IResult<&str, &str> {
     if let Ok(_) = char::<_, ()>('"')(m_input) {
         delimited(char('"'), is_not("\""), char('"'))(m_input)
     } else {
+
+        if let Ok((_input, _)) = char::<_, ()>(',')(m_input){
+            return Ok((m_input, ""));
+        }
+
         is_not(",")(m_input)
     }
 }
@@ -86,6 +114,9 @@ mod tests {
         };
     }
 
+    gen_test!(test_empty1, "a,,c", vec!["a", "", "c"]);
+    gen_test!(test_empty2, "a,,", vec!["a", "", ""]);
+    gen_test!(test_empty3, ",,", vec!["", "", ""]);
     gen_test!(test_basic, "a,b,c", vec!["a", "b", "c"]);
     gen_test!(test_with_quote1, "a,\"b\",c", vec!["a", "b", "c"]);
     gen_test!(
