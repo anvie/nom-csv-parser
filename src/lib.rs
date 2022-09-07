@@ -1,15 +1,11 @@
 use nom::{
-    bytes::complete::{is_not, tag, take_while, take_while_m_n},
+    bytes::complete::{is_not},
     character::complete::{char, space0},
-    combinator::map_res,
     sequence::{delimited, tuple},
     IResult,
 };
 
 fn non_quote_parse_rest(input: &str) -> IResult<&str, (&str, Vec<&str>)> {
-    // if input.is_empty() {
-    //     return Ok((input, ("", vec![])));
-    // }
     tuple((is_not(", "), csv_line_rest))(input)
 }
 
