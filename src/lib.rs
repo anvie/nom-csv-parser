@@ -35,10 +35,11 @@ fn csv_line_rest(input: &str) -> IResult<&str, Vec<&str>> {
     if input.is_empty() {
         return Ok((input, rv));
     }
-    if let Ok((_input, _)) = char::<_, ()>('"')(input) {
-        is_quoted = true;
-    }
+
     loop {
+        if let Ok((_input, _)) = char::<_, ()>('"')(input) {
+            is_quoted = true;
+        }
         if input.is_empty() {
             rv.push("");
             break;
@@ -111,7 +112,9 @@ mod tests {
         ($name:ident, $input:expr, $expected:expr) => {
             #[test]
             fn $name() {
-                assert_eq!(parse_line($input), Ok(("", $expected)));
+                let result = parse_line($input).unwrap();
+                assert_eq!(result.1.len(), $expected.len());
+                assert_eq!(result, ("", $expected));
             }
         };
     }
@@ -163,7 +166,7 @@ mod tests {
     );
     gen_test!(
         test_long_columns,
-        r#"1,22,33,44,abc def,GHI JKL,MNOP,"",2,5555,3333,"ABC DEFG",HIJ KLMNO,"1|2|3",0,X,A B C D E,0,000-000 00:00"#,
+        r#"1,22,33,44,abc def,GHI JKL,MNOP,"",2,5555,3333,"ABC DEFG",HIJ KLMNO,"1-2-3",0,X,A B C D E,0,000-000 00:00"#,
         vec![
             "1",
             "22",
@@ -178,12 +181,38 @@ mod tests {
             "3333",
             "ABC DEFG",
             "HIJ KLMNO",
-            "1|2|3",
+            "1-2-3",
             "0",
             "X",
             "A B C D E",
             "0",
             "000-000 00:00"
+        ]
+    );
+    gen_test!(
+        test_width_20,
+        r#"11,22,"YW","5, 6, 7,","","X, Y","","2","ZZZZ","","999901","zzzzz","Ab.","","","","","",,"#,
+        vec![
+            "11",
+            "22",
+            "YW",
+            "5, 6, 7,",
+            "",
+            "X, Y",
+            "",
+            "2",
+            "ZZZZ",
+            "",
+            "999901",
+            "zzzzz",
+            "Ab.",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            ""
         ]
     );
 }
