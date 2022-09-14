@@ -1,107 +1,46 @@
-use nom::{
-    bytes::complete::{is_not, tag},
-    character::complete::{char, space0},
-    sequence::{delimited, tuple},
-    IResult,
-};
+use std::io::Result;
 
-fn non_quote_parse_rest(input: &str) -> IResult<&str, (&str, Vec<&str>)> {
-    tuple((is_not(","), csv_line_rest))(input)
-}
+pub fn parse_line(line: &str) -> Result<Vec<String>> {
+    let mut rv: Vec<String> = vec![];
 
-fn quote_parse_rest(input: &str) -> IResult<&str, (&str, Vec<&str>)> {
-    tuple((delimited(char('"'), is_not("\""), char('"')), csv_line_rest))(input)
-}
+    let mut in_quote = false;
+    let mut buff: Vec<char> = vec![];
+    let mut col_completed = false;
+    let len = line.len();
 
-fn csv_line_rest(input: &str) -> IResult<&str, Vec<&str>> {
-    if input.is_empty() {
-        return Ok((input, vec![]));
-    }
-    let mut rv = vec![];
-    let mut input = input;
-    let mut is_quoted = false;
-    // clean up space if any
-    if let Ok((_input, _)) = space0::<_, ()>(input) {
-        input = _input;
-    }
-    // eat comma if any
-    if let Ok((_input, _)) = char::<_, ()>(',')(input) {
-        input = _input;
-    }
-    // clean up space if any
-    if let Ok((_input, _)) = space0::<_, ()>(input) {
-        input = _input;
-    }
-    if input.is_empty() {
-        return Ok((input, rv));
-    }
-
-    loop {
-        if let Ok((_input, _)) = char::<_, ()>('"')(input) {
-            is_quoted = true;
-        }
-        if input.is_empty() {
-            rv.push("");
-            break;
-        }
-        if is_quoted {
-            if let Ok((i, (field, rest))) = quote_parse_rest(input) {
-                rv.push(field);
-                rv.extend_from_slice(&rest);
-                input = i;
+    // parse column in csv separated comma line
+    for (i, c) in line.chars().enumerate() {
+        if col_completed {
+            // wait until get comma
+            if c == ',' {
+                col_completed = false;
             }
-            if let Ok((_input, _)) = tag::<_, _, ()>("\"\",")(input) {
-                rv.push("");
-                input = _input;
-                is_quoted = false;
-                continue;
-            }
-        }
-        if let Ok((_input, _)) = char::<_, ()>(',')(input) {
-            // empty column
-            rv.push("");
-            input = _input;
             continue;
         }
-        if let Ok((i, (field, rest))) = non_quote_parse_rest(input) {
-            input = i;
-            if input.is_empty() {
-                rv.push(field.trim());
-                rv.extend_from_slice(&rest);
-                break;
-            } else {
-                rv.push(field);
-                rv.extend_from_slice(&rest);
+        if c == '"' {
+            if in_quote {
+                rv.push(buff.iter().collect());
+                buff.clear();
+                col_completed = true;
             }
-        } else {
-            break;
+            in_quote = !in_quote;
+            continue;
+        }
+        if c == ',' && !in_quote {
+            rv.push(buff.iter().collect());
+            buff.clear();
+            if i == len - 1 {
+                rv.push("".to_string());
+            }
+            continue;
+        }
+        buff.push(c);
+        if i == len - 1 {
+            rv.push(buff.iter().collect());
         }
     }
-    Ok((input, rv))
-}
 
-fn first_part(input: &str) -> IResult<&str, &str> {
-    let mut m_input = input;
-    // clean up space if any
-    if let Ok((_input, _)) = space0::<_, ()>(m_input) {
-        m_input = _input;
-    }
-    if let Ok(_) = char::<_, ()>('"')(m_input) {
-        delimited(char('"'), is_not("\""), char('"'))(m_input)
-    } else {
-        if let Ok((_input, _)) = char::<_, ()>(',')(m_input) {
-            return Ok((m_input, ""));
-        }
-
-        is_not(",")(m_input)
-    }
-}
-
-pub fn parse_line(line: &str) -> IResult<&str, Vec<&str>> {
-    let (input, (first, _, rest)) = tuple((first_part, space0, csv_line_rest))(line)?;
-    let mut rv = vec![first];
-    rv.extend_from_slice(&rest);
-    Ok((input, rv))
+    Ok(rv.into_iter().map(|val| val.trim().to_string()).collect())
 }
 
 #[cfg(test)]
@@ -113,8 +52,8 @@ mod tests {
             #[test]
             fn $name() {
                 let result = parse_line($input).unwrap();
-                assert_eq!(result.1.len(), $expected.len());
-                assert_eq!(result, ("", $expected));
+                // assert_eq!(result.1.len(), $expected.len());
+                assert_eq!(result, $expected);
             }
         };
     }
@@ -193,26 +132,8 @@ mod tests {
         test_width_20,
         r#"11,22,"YW","5, 6, 7,","","X, Y","","2","ZZZZ","","999901","zzzzz","Ab.","","","","","",,"#,
         vec![
-            "11",
-            "22",
-            "YW",
-            "5, 6, 7,",
-            "",
-            "X, Y",
-            "",
-            "2",
-            "ZZZZ",
-            "",
-            "999901",
-            "zzzzz",
-            "Ab.",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            ""
+            "11", "22", "YW", "5, 6, 7,", "", "X, Y", "", "2", "ZZZZ", "", "999901", "zzzzz",
+            "Ab.", "", "", "", "", "", "", ""
         ]
     );
 }
