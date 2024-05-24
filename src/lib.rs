@@ -1,18 +1,16 @@
 use std::io::Result;
 
-pub fn parse_line(line: &str) -> Result<Vec<String>> {
+pub fn parse_line_sep(line: &str, separator: char) -> Result<Vec<String>> {
     let mut rv: Vec<String> = vec![];
-
     let mut in_quote = false;
     let mut buff: Vec<char> = vec![];
     let mut col_completed = false;
     let len = line.len();
-
     // parse column in csv separated comma line
     for (i, c) in line.chars().enumerate() {
         if col_completed {
             // wait until get comma
-            if c == ',' {
+            if c == separator {
                 col_completed = false;
             }
             continue;
@@ -26,7 +24,7 @@ pub fn parse_line(line: &str) -> Result<Vec<String>> {
             in_quote = !in_quote;
             continue;
         }
-        if c == ',' && !in_quote {
+        if c == separator && !in_quote {
             rv.push(buff.iter().collect());
             buff.clear();
             if i == len - 1 {
@@ -39,8 +37,11 @@ pub fn parse_line(line: &str) -> Result<Vec<String>> {
             rv.push(buff.iter().collect());
         }
     }
-
     Ok(rv.into_iter().map(|val| val.trim().to_string()).collect())
+}
+
+pub fn parse_line(line: &str) -> Result<Vec<String>> {
+    parse_line_sep(line, ',')
 }
 
 #[cfg(test)]
